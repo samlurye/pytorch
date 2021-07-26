@@ -42,7 +42,7 @@ struct TORCH_API DelayedError : public Node {
   DelayedError(std::string msg, int num_inputs)
     : msg(std::move(msg)) {
     // NOLINTNEXTLINE(clang-analyzer-deadcode.DeadStores,clang-diagnostic-unused-variable)
-    for (const auto i : c10::irange(num_inputs))
+    for ([[maybe_unused]] const auto i : c10::irange(num_inputs))
       add_input_metadata(Node::undefined_input());
     }
 
