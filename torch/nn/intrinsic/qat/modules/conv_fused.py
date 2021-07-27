@@ -216,6 +216,46 @@ class _ConvBnNd(nn.modules.conv._ConvNd, nni._FusedModule):
         qat_convbn.bn.num_batches_tracked = bn.num_batches_tracked  # type: ignore[has-type]
         return qat_convbn
 
+    def to_float(self):
+        modules = []
+        cls = type(self)
+        conv = cls._FLOAT_CONV_MODULE(
+            self.in_channels,
+            self.out_channels,
+            self.kernel_size,
+            self.stride,
+            self.padding,
+            self.dilation,
+            self.groups,
+            self.bias is not None,
+            self.padding_mode)
+        conv.weight = torch.nn.Parameter(self.weight.detach())
+        conv.bias = None
+        if self.bias is not None:
+            conv.bias = torch.nn.Parameter(self.bias.detach())
+        modules.append(conv)
+
+        if cls._FLOAT_BN_MODULE:
+            bn = cls._FLOAT_BN_MODULE(
+                self.bn.num_features,
+                self.bn.eps,
+                self.bn.momentum,
+                self.bn.affine,
+                self.bn.track_running_stats)
+            bn.weight = Parameter(self.bn.weight.detach())
+            bn.bias = None
+            if self.bn.bias is not None:
+                bn.bias = Parameter(self.bn.bias.detach())
+            modules.append(bn)
+
+        if cls._FLOAT_RELU_MODULE:
+            relu = cls._FLOAT_RELU_MODULE()
+            modules.append(relu)
+
+        result = cls._FLOAT_MODULE(*modules)
+        result.train(self.training)
+        return result
+
 class ConvBn1d(_ConvBnNd, nn.Conv1d):
     r"""
     A ConvBn1d module is a module fused from Conv1d and BatchNorm1d,
@@ -233,7 +273,10 @@ class ConvBn1d(_ConvBnNd, nn.Conv1d):
         weight_fake_quant: fake quant module for weight
 
     """
+    _FLOAT_BN_MODULE = nn.BatchNorm1d
+    _FLOAT_RELU_MODULE = None
     _FLOAT_MODULE = nni.ConvBn1d
+    _FLOAT_CONV_MODULE = nn.Conv1d
 
     def __init__(self,
                  # Conv1d args
@@ -275,6 +318,9 @@ class ConvBnReLU1d(ConvBn1d):
     """
     # base class defines _FLOAT_MODULE as "ConvBn1d"
     _FLOAT_MODULE = nni.ConvBnReLU1d  # type: ignore[assignment]
+    _FLOAT_CONV_MODULE = nn.Conv1d
+    _FLOAT_BN_MODULE = nn.BatchNorm1d
+    _FLOAT_RELU_MODULE = nn.ReLU
 
     def __init__(self,
                  # Conv1d args
@@ -321,6 +367,9 @@ class ConvBn2d(_ConvBnNd, nn.Conv2d):
 
     """
     _FLOAT_MODULE = nni.ConvBn2d
+    _FLOAT_CONV_MODULE = nn.Conv2d
+    _FLOAT_BN_MODULE = nn.BatchNorm2d
+    _FLOAT_RELU_MODULE = None
 
     def __init__(self,
                  # ConvNd args
@@ -362,6 +411,9 @@ class ConvBnReLU2d(ConvBn2d):
     """
     # base class defines _FLOAT_MODULE as "ConvBn2d"
     _FLOAT_MODULE = nni.ConvBnReLU2d  # type: ignore[assignment]
+    _FLOAT_CONV_MODULE = nn.Conv2d
+    _FLOAT_BN_MODULE = nn.BatchNorm2d
+    _FLOAT_RELU_MODULE = nn.ReLU
 
     def __init__(self,
                  # Conv2d args
@@ -403,6 +455,9 @@ class ConvReLU2d(nnqat.Conv2d, nni._FusedModule):
 
     """
     _FLOAT_MODULE = nni.ConvReLU2d
+    _FLOAT_CONV_MODULE = nn.Conv2d
+    _FLOAT_BN_MODULE = None
+    _FLOAT_RELU_MODULE = nn.ReLU
 
     def __init__(self, in_channels, out_channels, kernel_size, stride=1,
                  padding=0, dilation=1, groups=1,
@@ -424,7 +479,6 @@ class ConvReLU2d(nnqat.Conv2d, nni._FusedModule):
     def from_float(cls, mod):
         return super(ConvReLU2d, cls).from_float(mod)
 
-
 class ConvBn3d(_ConvBnNd, nn.Conv3d):
     r"""
     A ConvBn3d module is a module fused from Conv3d and BatchNorm3d,
@@ -443,6 +497,9 @@ class ConvBn3d(_ConvBnNd, nn.Conv3d):
 
     """
     _FLOAT_MODULE = nni.ConvBn3d
+    _FLOAT_CONV_MODULE = nn.Conv3d
+    _FLOAT_BN_MODULE = nn.BatchNorm3d
+    _FLOAT_RELU_MODULE = None
 
     def __init__(
         self,
@@ -490,7 +547,6 @@ class ConvBn3d(_ConvBnNd, nn.Conv3d):
             dim=3,
         )
 
-
 class ConvBnReLU3d(ConvBn3d):
     r"""
     A ConvBnReLU3d module is a module fused from Conv3d, BatchNorm3d and ReLU,
@@ -508,6 +564,9 @@ class ConvBnReLU3d(ConvBn3d):
 
     """
     _FLOAT_MODULE = nni.ConvBnReLU3d  # type: ignore[assignment]
+    _FLOAT_CONV_MODULE = nn.Conv3d
+    _FLOAT_BN_MODULE = nn.BatchNorm3d
+    _FLOAT_RELU_MODULE = nn.ReLU
 
 
     def __init__(
@@ -555,7 +614,6 @@ class ConvBnReLU3d(ConvBn3d):
     def from_float(cls, mod):
         return super(ConvBnReLU3d, cls).from_float(mod)
 
-
 class ConvReLU3d(nnqat.Conv3d, nni._FusedModule):
     r"""A ConvReLU3d module is a fused module of Conv3d and ReLU, attached with
     FakeQuantize modules for weight for
@@ -569,6 +627,9 @@ class ConvReLU3d(nnqat.Conv3d, nni._FusedModule):
 
     """
     _FLOAT_MODULE = nni.ConvReLU3d
+    _FLOAT_CONV_MODULE = nn.Conv3d
+    _FLOAT_BN_MODULE = None
+    _FLOAT_RELU_MODULE = nn.ReLU
 
     def __init__(
         self,
@@ -607,7 +668,6 @@ class ConvReLU3d(nnqat.Conv3d, nni._FusedModule):
     @classmethod
     def from_float(cls, mod):
         return super(ConvReLU3d, cls).from_float(mod)
-
 
 def update_bn_stats(mod):
     if type(mod) in set(
